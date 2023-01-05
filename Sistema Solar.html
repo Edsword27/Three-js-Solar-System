@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8" />
+    <title>Sistema Solar.js</title>
+    <style>
+        body { margin: 0; }
+ 
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <script src="js/jquery-3.6.3.js"></script>
+    <script type='text/javascript' src='js/dat.gui.js'></script>
+    <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three';
+    import TrackballControls from "https://cdn.skypack.dev/three@0.129.0/examples/jsm/controls/TrackballControls";
+    //import { TrackballControls } from './node_modules/three/examples/jsm/controls/TrackballControls.js';
+    import Stats from 'https://cdn.skypack.dev/stats.js.fps';
+
+    var Defaults = {
+        "divId": "Class3DContainer",
+        "axisColor": "white",
+        "xo": -5000,
+        "xe": 5000,
+        "yo": -5000,
+        "ye": 5000,
+        "zo": -5000,
+        "ze": 5000,
+        "Sun_radius": 1000,
+        "Earth_radius": 200,
+        "Moon_radius": 55,
+        "Star_radius": 10000,
+        "EO_near": 2500, //EO = Earth Orbit
+        "EO_far": 3000,
+        "MO_length": 350, //MO = Moon Orbit
+        "Sun_position": 0,
+        "scale": 1,
+        "speed": 0.0005, 
+        "Earth_rotation": 1.074264706, 
+        "luna_tras": 0.040625 
+    };
+ 
+    jQuery(document)
+        .ready(function($) {
+            var class3D = new Class3D(Defaults);
+            class3D.initClass3D();
+            class3D.animateClass3D();
+            class3D = null;
+        });
+ 
+    //CLASS
+    function Class3D(defaults) {
+        this.initClass3D = init;
+        this.Scene;
+        this.World;
+        this.Camera;
+        this.Renderer;
+        this.Controls;
+        this.Sun_Sphere;
+        this.Earth_Sphere;
+        this.Moon_Sphere;
+        this.Star_Sphere;
+        this.Earth_Orbit;
+        this.Moon_Orbit; 
+        function init() {
+
+            //DIV
+            var container = document.getElementById(defaults.divId);
+            document.body.appendChild(container);
+ 
+            //SCENE
+            var Scene = new THREE.Scene();
+ 
+            //SCENE
+            var World = new THREE.Object3D();
+
+            //MENU CONTROLS
+            var Gui = new dat.GUI({height : 10 * 10 - 1});
+
+            //AXES
+            var axes = buildAxes(defaults);
+            World.add(axes);
+ 
+            //DRAW AXES LABELS
+            //drawAxesLabels(defaults);
+ 
+            //STATS
+            let stats = new Stats();
+            stats.showPanel(0);
+ 
+            //STATS POSITION
+            stats.domElement.style.position = 'absolute';
+            stats.domElement.style.left = '0px';
+            stats.domElement.style.bottom = '0px';
+            document.body.appendChild( stats.domElement );
+ 
+            //CAMERA
+            var Camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 25000);
+ 
+            //RENDERER
+            var Renderer = new THREE.WebGLRenderer();
+            Renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(Renderer.domElement);
+ 
+            //CAMERA CONTROLS
+            Controls = new TrackballControls(Camera, Renderer.domElement);
+            Controls.maxDistance = defaults.Star_radius-100;
+
+            //RESIZING WINDOW
+            window.addEventListener( 'resize', function () {
+                Camera.aspect = window.innerWidth / window.innerHeight;
+                Camera.updateProjectionMatrix();
+                Renderer.setSize( window.innerWidth, window.innerHeight );
+            }, false );
+
+            //LIGHTS
+            var ambientLight = new THREE.AmbientLight(0x000000);
+            World.add(ambientLight);
+            lights = [];
+            lights[0] = new THREE.DirectionalLight(0xffffff, 2);
+            lights[0].position.set(0, 0, 0);
+            lights[0].castShadow = true;
+            World.add(lights[0]);
+
+            //MENU CONTROLS FUNCTIONS
+            Gui.close();
+            var sun_Folder = Gui.addFolder('Sol');
+            var earth_Folder = Gui.addFolder('Tierra');
+            var moon_Folder = Gui.addFolder('Luna');
+            var speed_Folder = Gui.addFolder('Velocidad');
+
+            sun_Folder.add(defaults,"Sun_position").min(-3000).max(3000).step(100).name('Mover Sol X').onChange(function(value){
+                Sun_Sphere.position.x=value;
+                lights[0].position.x=value;
+            });
+
+            sun_Folder.add(defaults,"Sun_position").min(-3000).max(3000).step(100).name('Mover Sol Y').onChange(function(value){
+                Sun_Sphere.position.y=value;
+                lights[0].position.y=value;
+            });
+
+            sun_Folder.add(defaults,"Sun_position").min(-3000).max(3000).step(100).name('Mover Sol Z').onChange(function(value){
+                Sun_Sphere.position.z=value;
+                lights[0].position.z=value;
+            });
+
+            sun_Folder.add(defaults,"scale").min(0).max(2).step(0.01).name("Escala Sol").onChange(function(value){
+                Sun_Sphere.scale.set(value,value,value);
+            });
+
+            earth_Folder.add(defaults,"EO_far").min(1000).max(4000).step(100).name('Orbita X').onChange(function(value){
+                Earth_Sphere.position.x=value;
+                earth_orbit_formula(value,defaults.EO_near);
+                Earth_splineObject.scale.x = value*(0.03351/100);
+                Defaults.EO_far = value;
+            });
+
+            earth_Folder.add(defaults,"EO_near").min(1000).max(4000).step(100).name('Orbita Z').onChange(function(value){
+                Earth_Sphere.position.z=value;
+                earth_orbit_formula(defaults.EO_far,value);
+                Earth_splineObject.scale.z = value*(0.04/100);
+                Defaults.EO_near = value;
+            });
+
+            earth_Folder.add(defaults,"scale").min(0).max(2).step(0.01).name("Escala Tierra").onChange(function(value){
+                Earth_Sphere.scale.set(value,value,value);
+            });
+            
+            moon_Folder.add(defaults,"scale").min(0).max(4).step(0.01).name("Escala Luna").onChange(function(value){
+                Moon_Sphere.scale.set(value,value,value);
+            });
+
+            moon_Folder.add(defaults, "MO_length").min(200).max(1000).step(50).name('Mover Luna').onChange(function(value){
+                Moon_Sphere.position.set(value,0,0);
+                Moon_splineObject.scale.set(value*(0.2857/100),0,value*(0.2857/100));
+            });
+
+            speed_Folder.add(defaults,"speed").min(0.0001).max(0.001).step(0.0001).name('Velocidad').onChange(function(value){
+                Defaults.speed=value;
+                Earth_Sphere.rotation.y += (value*0.214852941)*10000;
+                Moon_Sphere.rotation.y += (value*0.214852941)*10000;
+                Defaults.velocidad_tierra_rot = (value*0.214852941)*10000;
+                Moon_Pivot.rotation.y += (value*0.008125)*10000;
+                Defaults.luna_tras = (value*0.008125)*10000;
+            });
+
+            //SPLINE
+            function toRadians (angle) 
+            {
+            return angle * (Math.PI / 180);
+            }
+
+            var earth_points=[],moon_points=[];
+            var i,j;
+
+            //EARTH ORBIT
+            function earth_orbit_formula(lejos,cerca){
+                for(i=0,j=0;i<37;i++,j+=10){
+                earth_points[i] = new THREE.Vector3(Math.cos(toRadians(j))*lejos,0,Math.sin(toRadians(j))*(-cerca));
+                }
+            }
+            for(i=0,j=0;i<37;i++,j+=10)
+            {
+                earth_points.push(new THREE.Vector3(Math.cos(toRadians(j))*defaults.EO_far,0,Math.sin(toRadians(j))*(-defaults.EO_near)));
+            }
+            Earth_Orbit = new THREE.CatmullRomCurve3(earth_points);
+            var EO_geometry = new THREE.BufferGeometry();
+            EO_geometry.vertices = Earth_Orbit.getPoints( 100 );
+            var EO_material = new THREE.LineBasicMaterial( { color : 0xffffff } );
+            Earth_splineObject = new THREE.Line( EO_geometry, EO_material );
+            Earth_splineObject.set
+            World.add(Earth_splineObject);
+
+            //MOON ORBIT
+            for(i=0,j=0;i<37;i++,j+=10)
+            {
+                moon_points.push(new THREE.Vector3(Math.cos(toRadians(j))*defaults.MO_length,0,Math.sin(toRadians(j))*(-defaults.MO_length)));
+            }
+            Moon_Orbit = new THREE.CatmullRomCurve3(moon_points);
+            var MO_geometry = new THREE.BufferGeometry();
+            MO_geometry.vertices = Moon_Orbit.getPoints( 100 );
+            var MO_material = new THREE.LineBasicMaterial( { color : 0xffffff } );
+            Moon_splineObject = new THREE.Line( MO_geometry, MO_material );
+            Moon_splineObject.set
+            World.add(Moon_splineObject);
+            
+            //GEOMETRY
+            var Sun_geometry = new THREE.SphereGeometry(defaults.Sun_radius, 64, 64);
+            var Earth_geometry = new THREE.SphereGeometry(defaults.Earth_radius,64,64);
+            var Moon_geometry = new THREE.SphereGeometry(defaults.Moon_radius,64,64);
+            var Star_geometry = new THREE.SphereGeometry(defaults.Star_radius,128,128);
+ 
+            //MATERIAL
+            var textureLoad = new THREE.TextureLoader();
+
+            var Sun_material = new THREE.MeshBasicMaterial({
+                color: 0xf39f18,
+                //emissive: 0xffffff,
+                map: textureLoad.load("img/Sun_Texture.jpg"),
+                side: THREE.DoubleSide,
+                shading: THREE.SmootjShading //THREE.FlatShading
+            });
+            Sun_material.map.minFilter = THREE.LinearFilter;
+ 
+            var Earth_material = new THREE.MeshLambertMaterial({
+                color: 0xffffff, //0x156289,
+                emissive: 0x000000,
+                map: textureLoad.load("https://1.bp.blogspot.com/-UUXaK5GCj-k/UcsKJRMgkVI/AAAAAAAACfM/sePP_H08JTQ/s1600/1.jpg"),
+                //alphaMap: textureLoad.load("img/Earth_Texture.jpg"),
+                //aoMap: textureLoad.load("img/Earth_Texture.jpg"),
+                //emissiveMap: textureLoad.load("img/Earth_Texture.jpg"),
+                lightMap: textureLoad.load("https://1.bp.blogspot.com/-UUXaK5GCj-k/UcsKJRMgkVI/AAAAAAAACfM/sePP_H08JTQ/s1600/1.jpg"),
+                specularMap: textureLoad.load("https://1.bp.blogspot.com/-UUXaK5GCj-k/UcsKJRMgkVI/AAAAAAAACfM/sePP_H08JTQ/s1600/1.jpg"),
+                side: THREE.DoubleSide,
+                shading: THREE.SmootjShading //THREE.FlatShading
+            });
+            Earth_material.map.minFilter = THREE.LinearFilter;
+
+            var Moon_material = new THREE.MeshLambertMaterial({
+                color: 0xc0c0c0, 
+                emissive: 0xffffff,
+                map: textureLoad.load("img/Moon_Texture.jpg"),
+                side: THREE.DoubleSide,
+                shading: THREE.SmootjShading //THREE.FlatShading
+            });
+            Moon_material.map.minFilter = THREE.LinearFilter;
+
+            var Star_material = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                emissive: 0xffffff,
+                map: textureLoad.load("https://images.unsplash.com/photo-1520034475321-cbe63696469a?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8Mnx8c3RhciUyMHRleHR1cmV8ZW58MHx8MHx8&w=1000&q=80"),
+                side: THREE.DoubleSide,
+                shading: THREE.SmootjShading //THREE.FlatShading 
+            });
+            Star_material.map.minFilter = THREE.LinearFilter;
+
+            //MESH
+            Sun_Sphere = new THREE.Mesh(Sun_geometry, Sun_material);
+            World.add(Sun_Sphere);
+            Earth_Sphere = new THREE.Mesh(Earth_geometry, Earth_material);
+            Earth_Sphere.position.set(defaults.EO_far,0,0);
+            World.add(Earth_Sphere);
+            Moon_Sphere = new THREE.Mesh(Moon_geometry, Moon_material);
+            Moon_Sphere.position.set(defaults.MO_length,0,0);
+            World.add(Moon_Sphere);
+            Star_Sphere = new THREE.Mesh(Star_geometry, Star_material);
+            World.add(Star_Sphere);
+            Camera.position.z = 4000;
+            Scene.add(World);
+            
+            //MOON PIVOT
+            Moon_Pivot = new THREE.Object3D();
+            Moon_Pivot.position = Earth_Sphere.position;
+            Moon_Pivot.add( Moon_Sphere );
+            World.add(Moon_Pivot);
+
+            //SHADOW
+            Renderer.shadowMap.enabled = true;
+            Renderer.shadowMapSoft = false;
+            Renderer.shadowCameraNear = 3;
+            Renderer.shadowCameraFar = Camera.far;
+            Renderer.shadowCameraFov = 50;
+            Renderer.shadowMapBias = 0.0039;
+            Renderer.shadowMapDarkness = 1;
+            Renderer.shadowMapWidth = 1024;
+            Renderer.shadowMapHeight = 1024;
+            var helper = new THREE.CameraHelper( lights[0].shadow.camera);
+            Moon_Sphere.castShadow = true;
+            Moon_Sphere.receiveShadow = true;
+            Earth_Sphere.castShadow = true;
+            Earth_Sphere.receiveShadow = true;
+        }
+ 
+        //ANIMATE
+        var t=0;
+        var time = Date.now()*defaults.velo;
+        this.animateClass3D = function animate() {
+            requestAnimationFrame(animate);
+            stats.begin();
+            Earth_Sphere.rotation.y += defaults.Earth_rotation;
+            Moon_Sphere.lookAt(Earth_Sphere.position);
+            Earth_point = Earth_Orbit.getPointAt(t);
+            Earth_Sphere.position.x = Earth_point.x; 
+            Earth_Sphere.position.z = Earth_point.z;
+            Moon_Pivot.position.x = Earth_point.x; 
+            Moon_Pivot.position.z = Earth_point.z; 
+            lights[0].target.position.set(Earth_point.x, 0, Earth_point.z);
+            Moon_point = Moon_Orbit.getPointAt(t);
+            Moon_splineObject.position.x = Earth_point.x;
+            Moon_splineObject.position.z = Earth_point.z;
+            t = (t + defaults.speed) % 1;
+            Moon_Pivot.rotation.y += defaults.luna_tras;
+            Controls.update();
+            Renderer.render(Scene, Camera);
+            stats.end();
+        }
+        
+        function buildAxes(defaults) {
+            var axis = new THREE.Object3D();
+            axis.add(buildAxis(new THREE.Vector3(0, 0, 0), new THREE.Vector3(defaults.xe, 0, 0), defaults.axisColor, false)); // +X
+            axis.add(buildAxis(new THREE.Vector3(0, 0, 0), new THREE.Vector3(defaults.xo, 0, 0), "red", true)); // -X
+            axis.add(buildAxis(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, defaults.ye, 0), defaults.axisColor, false)); // +Y
+            axis.add(buildAxis(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, defaults.yo, 0), "green", true)); // -Y
+            axis.add(buildAxis(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, defaults.ze), defaults.axisColor, false)); // +Z
+            axis.add(buildAxis(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, defaults.zo), "yellow", true)); // -Z
+            return axis;
+        }
+ 
+        function buildAxis(src, dst, colorHex, dashed) {
+            var geom = new THREE.BufferGeometry(), mat;
+            if (dashed)
+                mat = new THREE.LineDashedMaterial({ linewidth: 3, color: colorHex, dashSize: 3, gapSize: 3 });
+            else
+                mat = new THREE.LineBasicMaterial({ linewidth: 3, color: colorHex });
+            const points = []
+            points.push(src.clone())
+            points.push(dst.clone())
+            geom.setFromPoints(points)
+            var axis = new THREE.Line(geom, mat, THREE.LineSegments);
+            axis.computeLineDistances();
+            mat.dispose();
+            return axis;
+        }
+ 
+        //DRAW AXES LABELS
+        /*function drawAxesLabels(defaults) {
+ 			
+ 			var loader = new FontLoader();
+
+            var theText = "NORTH";
+			loader.load( 'js/optimer_regular.typeface.json', function (font) {
+            	var text3d = new THREE.TextGeometry(theText, {
+                	size: 4,
+                	height: 0,
+                	curveSegments: 1,
+                	font: "optimer"
+            	});
+            	var textMaterial = new THREE.MeshBasicMaterial({ color: defaults.axisColor, overdraw: 1 });
+            	var text = new THREE.Mesh(text3d, textMaterial);
+            	text.position.x = 0;
+            	text.position.y = defaults.ye;
+            	text.position.z = 0;
+            	World.add(text);
+            	textMaterial.dispose();
+            });
+           
+            var theText = "SOUTH";
+            loader.load( 'js/optimer_regular.typeface.json', function (font) {
+            	var text3d = new THREE.TextGeometry(theText, {
+                	size: 4,
+                	height: 0,
+                	curveSegments: 1,
+                	font: "optimer"
+            	});
+             	var textMaterial = new THREE.MeshBasicMaterial({ color: defaults.axisColor, overdraw: 1 });
+            	var text = new THREE.Mesh(text3d, textMaterial);
+            	text.position.x = 0;
+            	text.position.y = defaults.yo;
+            	text.position.z = 0;
+            	World.add(text);
+            	textMaterial.dispose();
+            });
+
+            var theText = "EAST";
+            loader.load( 'js/optimer_regular.typeface.json', function (font) {
+            	var text3d = new THREE.TextGeometry(theText, {
+                	size: 4,
+                	height: 0,
+                	curveSegments: 1,
+                	font: "optimer"
+            	});
+            	var textMaterial = new THREE.MeshBasicMaterial({ color: defaults.axisColor, overdraw: 1 });
+            	var text = new THREE.Mesh(text3d, textMaterial);
+            	text.position.x = defaults.xe;
+            	text.position.y = 0;
+            	text.position.z = 0;
+            	World.add(text);
+            	textMaterial.dispose();
+            });
+
+            var theText = "WEST";
+            loader.load( 'js/optimer_regular.typeface.json', function (font) {
+            	var text3d = new THREE.TextGeometry(theText, {
+                	size: 4,
+                	height: 0,
+                	curveSegments: 1,
+                	font: "optimer"
+            	});
+            	var textMaterial = new THREE.MeshBasicMaterial({ color: defaults.axisColor, overdraw: 1 });
+            	var text = new THREE.Mesh(text3d, textMaterial);
+            	text.position.x = defaults.xo;
+            	text.position.y = 0;
+            	text.position.z = 0;
+            	World.add(text);
+            	textMaterial.dispose();
+            });
+
+            var theText = "-z";
+            loader.load( 'js/optimer_regular.typeface.json', function (font) {
+            	var text3d = new THREE.TextGeometry(theText, {
+                	size: 4,
+                	height: 0,
+                	curveSegments: 1,
+                	font: "optimer"
+            	});
+            	var textMaterial = new THREE.MeshBasicMaterial({ color: defaults.axisColor, overdraw: 1 });
+            	var text = new THREE.Mesh(text3d, textMaterial);
+            	text.position.x = 0;
+            	text.position.y = 0;
+            	text.position.z = defaults.zo;
+            	World.add(text);
+            	textMaterial.dispose();
+            });
+ 
+            var theText = "+z";
+            loader.load( 'js/optimer_regular.typeface.json', function (font) {
+            	var text3d = new THREE.TextGeometry(theText, {
+                	size: 4,
+                	height: 0,
+                	curveSegments: 1,
+                	font: "optimer"
+            	});
+             	var textMaterial = new THREE.MeshBasicMaterial({ color: defaults.axisColor, overdraw: 1 });
+            	var text = new THREE.Mesh(text3d, textMaterial);
+            	text.position.x = 0;
+            	text.position.y = 0;
+            	text.position.z = defaults.ze;
+            	World.add(text);
+            	textMaterial.dispose();
+            });  
+        }*/
+    }
+ 
+    </script>
+</head>
+<body>
+    <div id="Class3DContainer" class="scene3d" style="position: absolute; top: 10px; text-align: center; width:400px; height:400px">
+        <h3 style="color: #fff; font-family: verdana; font-size: 10px">0723703-Computacion Grafica I. Seccion 01</h3>
+        <h3 style="color: #fff; font-family: verdana; font-size: 10px">Eduardo Lunar. C.I.24.513.298</h3>
+    </div>
+</body>
+</html>
